@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notes Engine -- mp4 to txt</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz@6..72&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bone:    #ece3d2;
+    --paper:   #f4ecdc;
+    --ink:     #1d1a15;
+    --ink-2:   #4a4339;
+    --line:    #c8bca3;
+    --rust:    #c0431d;
+    --rust-dk: #9c3414;
+    --moss:    #4f6b4a;
+    --gold:    #c98a1e;
+    --shadow:  rgba(29,26,21,0.18);
+
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --disp: "Fraunces", Georgia, serif;
+    --body: "Newsreader", Georgia, serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 17px; }
+
+  body {
+    font-family: var(--body);
+    background: var(--bone);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* film-grain + paper texture overlay */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9;
+    opacity: 0.5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  }
+
+  /* warm radial glow behind the card */
+  body::after {
+    content: "";
+    position: fixed;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 900px;
+    height: 700px;
+    background: radial-gradient(ellipse at center, rgba(201,138,30,0.18), transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- CARD ---- */
+  .panel {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 600px;
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    box-shadow: 10px 10px 0 var(--ink), 10px 10px 0 1.5px var(--ink);
+    padding: 0;
+  }
+
+  /* corner registration marks */
+  .reg {
+    position: absolute;
+    width: 16px; height: 16px;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .reg::before, .reg::after {
+    content: ""; position: absolute; background: var(--rust);
+  }
+  .reg::before { width: 16px; height: 1.5px; top: 7px; }
+  .reg::after  { height: 16px; width: 1.5px; left: 7px; }
+  .reg.tl { top: 10px; left: 10px; }
+  .reg.tr { top: 10px; right: 10px; }
+  .reg.bl { bottom: 10px; left: 10px; }
+  .reg.br { bottom: 10px; right: 10px; }
+
+  /* ---- HEADER ---- */
+  header {
+    padding: 30px 36px 22px;
+    border-bottom: 1.5px solid var(--ink);
+    position: relative;
+  }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--rust);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .kicker .rec {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--rust);
+    animation: blink 1.6s steps(1) infinite;
+  }
+  @keyframes blink { 0%,60% { opacity: 1; } 61%,100% { opacity: 0.18; } }
+
+  h1 {
+    font-family: var(--disp);
+    font-weight: 900;
+    font-size: 2.9rem;
+    line-height: 0.94;
+    letter-spacing: -0.02em;
+    font-optical-sizing: auto;
+  }
+  h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--rust);
+  }
+
+  .tagline {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+  }
+  .tagline b { color: var(--ink); font-weight: 700; }
+
+  /* ---- BODY ---- */
+  .stage { padding: 28px 36px 34px; }
+
+  .step-tag {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .step-tag::before {
+    content: attr(data-n);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 2px 7px;
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+  }
+  .step-tag::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  /* ---- DROP ZONE ---- */
+  .drop {
+    position: relative;
+    border: 2px dashed var(--line);
+    background: rgba(255,255,255,0.35);
+    padding: 30px 22px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s, transform .12s;
+  }
+  .drop:hover, .drop.over {
+    border-color: var(--rust);
+    background: rgba(192,67,29,0.05);
+  }
+  .drop.over { transform: scale(1.01); }
+  .drop input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  }
+
+  /* animated waveform */
+  .wave {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 40px;
+    margin-bottom: 14px;
+  }
+  .wave span {
+    width: 4px;
+    background: var(--ink);
+    border-radius: 2px;
+    animation: bounce 1.1s ease-in-out infinite;
+  }
+  .drop:hover .wave span { background: var(--rust); }
+  .wave span:nth-child(1){ height: 12px; animation-delay: 0s; }
+  .wave span:nth-child(2){ height: 26px; animation-delay: .1s; }
+  .wave span:nth-child(3){ height: 38px; animation-delay: .2s; }
+  .wave span:nth-child(4){ height: 20px; animation-delay: .3s; }
+  .wave span:nth-child(5){ height: 32px; animation-delay: .4s; }
+  .wave span:nth-child(6){ height: 14px; animation-delay: .5s; }
+  .wave span:nth-child(7){ height: 28px; animation-delay: .6s; }
+  .wave span:nth-child(8){ height: 18px; animation-delay: .7s; }
+  @keyframes bounce { 0%,100% { transform: scaleY(0.5); } 50% { transform: scaleY(1); } }
+
+  .drop .prompt {
+    font-family: var(--disp);
+    font-size: 1.18rem;
+    font-weight: 600;
+  }
+  .drop .hint {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    color: var(--ink-2);
+    margin-top: 6px;
+  }
+
+  /* ---- LOADED FILE CARD ---- */
+  .loaded {
+    display: none;
+    border: 1.5px solid var(--ink);
+    background: #fff;
+    margin-top: 4px;
+  }
+  .loaded.show { display: block; animation: pop .35s ease; }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .loaded .lf-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .lf-badge {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    background: var(--moss);
+    color: var(--paper);
+    padding: 5px 8px;
+  }
+  .lf-name {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    font-weight: 500;
+    word-break: break-all;
+    flex: 1;
+  }
+  .lf-remove {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    border: 1px solid var(--line);
+    background: none;
+    color: var(--ink-2);
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .lf-remove:hover { border-color: var(--rust); color: var(--rust); }
+
+  .lf-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .lf-meta div {
+    padding: 12px 14px;
+    border-right: 1px solid var(--line);
+  }
+  .lf-meta div:last-child { border-right: none; }
+  .lf-meta .k {
+    font-family: var(--mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 4px;
+  }
+  .lf-meta .v {
+    font-family: var(--mono);
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  audio {
+    width: calc(100% - 32px);
+    margin: 14px 16px;
+    height: 38px;
+  }
+
+  /* ---- TOGGLE CONSOLE ---- */
+  .console { margin-top: 28px; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .row:first-of-type { border-top: 1px solid var(--line); }
+
+  .row .lbl {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .row .idx {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--rust);
+    letter-spacing: 0.08em;
+  }
+  .row .name {
+    font-family: var(--disp);
+    font-size: 1.12rem;
+    font-weight: 600;
+  }
+  .row .desc {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+    margin-top: 2px;
+  }
+
+  /* segmented control (duration) */
+  .seg { display: flex; border: 1.5px solid var(--ink); }
+  .seg button {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 9px 14px;
+    background: transparent;
+    color: var(--ink);
+    border: none;
+    border-right: 1.5px solid var(--ink);
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button:hover { background: rgba(192,67,29,0.1); }
+  .seg button.on { background: var(--rust); color: var(--paper); }
+
+  /* native select */
+  select {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    font-weight: 500;
+    background: #fff;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: 9px 32px 9px 12px;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%231d1a15' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+  select:focus { box-shadow: 0 0 0 2px var(--rust); }
+
+  /* toggle switch */
+  .switch { position: relative; width: 56px; height: 30px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .slider::before {
+    content: "";
+    position: absolute;
+    width: 20px; height: 20px;
+    left: 3px; top: 3px;
+    background: var(--ink);
+    transition: transform .2s, background .2s;
+  }
+  .switch input:checked + .slider { background: var(--moss); }
+  .switch input:checked + .slider::before { transform: translateX(26px); background: var(--paper); }
+
+  /* ---- GENERATE ---- */
+  .generate {
+    position: relative;
+    width: 100%;
+    margin-top: 30px;
+    padding: 20px;
+    font-family: var(--mono);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--paper);
+    background: var(--ink);
+    border: 1.5px solid var(--ink);
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform .1s;
+  }
+  .generate span { position: relative; z-index: 1; }
+  .generate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--rust);
+    transform: translateX(-101%);
+    transition: transform .28s ease;
+  }
+  .generate:hover:not(:disabled)::after { transform: translateX(0); }
+  .generate:active:not(:disabled) { transform: translateY(2px); }
+  .generate:disabled {
+    background: var(--bone);
+    color: var(--line);
+    border-color: var(--line);
+    cursor: not-allowed;
+  }
+
+  /* progress */
+  .prog {
+    display: none;
+    margin-top: 16px;
+    height: 8px;
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    overflow: hidden;
+  }
+  .prog-bar {
+    height: 100%;
+    width: 0;
+    background: repeating-linear-gradient(45deg, var(--rust), var(--rust) 8px, var(--rust-dk) 8px, var(--rust-dk) 16px);
+    transition: width .4s;
+  }
+
+  /* status */
+  .status {
+    display: none;
+    margin-top: 16px;
+    padding: 13px 16px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    border-left: 4px solid var(--ink);
+    background: #fff;
+  }
+  .status.show { display: block; }
+  .status.info    { border-color: var(--gold); }
+  .status.success { border-color: var(--moss); color: var(--moss); }
+  .status.error   { border-color: var(--rust); color: var(--rust-dk); }
+  .status b { font-weight: 700; }
+
+  /* locked / pro features */
+  .row.locked .name { color: var(--ink-2); }
+  .pro {
+    font-family: var(--mono);
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    background: var(--gold);
+    color: var(--ink);
+    padding: 2px 5px;
+    margin-left: 6px;
+    border-radius: 2px;
+    vertical-align: 2px;
+  }
+  .pro-lock {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--ink-2);
+    background: repeating-linear-gradient(45deg, #efe7d6, #efe7d6 6px, #e7ddc8 6px, #e7ddc8 12px);
+    border: 1.5px solid var(--line);
+    padding: 9px 15px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .pro-lock:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* output .txt panel */
+  .result {
+    display: none;
+    margin-top: 16px;
+    border: 1.5px solid var(--ink);
+    background: #fff;
+  }
+  .result.show { display: block; animation: pop .35s ease; }
+  .result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .res-badge {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 4px 8px;
+  }
+  .res-copy {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    border: 1px solid var(--line);
+    background: none;
+    color: var(--ink-2);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .res-copy:hover { border-color: var(--rust); color: var(--rust); }
+  .result-body {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    line-height: 1.6;
+    color: var(--ink);
+    padding: 14px 16px;
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+
+  /* footer */
+  footer {
+    border-top: 1.5px solid var(--ink);
+    padding: 14px 36px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    color: var(--ink-2);
+    text-transform: uppercase;
+  }
+
+  /* staggered load reveal */
+  .reveal { opacity: 0; transform: translateY(14px); animation: rise .6s forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .d1 { animation-delay: .05s; }
+  .d2 { animation-delay: .15s; }
+  .d3 { animation-delay: .25s; }
+  .d4 { animation-delay: .35s; }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 2.2rem; }
+    header, .stage, footer { padding-left: 22px; padding-right: 22px; }
+    .panel { box-shadow: 6px 6px 0 var(--ink); }
+  }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <span class="reg tl"></span><span class="reg tr"></span>
+  <span class="reg bl"></span><span class="reg br"></span>
+
+  <header class="reveal d1">
+    <div class="kicker"><span class="rec"></span> Audio -> Text / Notes Engine</div>
+    <h1>Notes <em>Engine</em></h1>
+    <p class="tagline"><b>.mp4</b> in &nbsp;->&nbsp; <b>.txt</b> out &nbsp;//&nbsp; transcribes the first segment</p>
+  </header>
+
+  <div class="stage">
+
+    <!-- STEP 01 : UPLOAD -->
+    <div class="reveal d2">
+      <div class="step-tag" data-n="01">Source File</div>
+
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept="video/mp4,.mp4" />
+        <div class="wave">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="prompt">Drop an .mp4 here</div>
+        <div class="hint">or click to browse &middot; single video file</div>
+      </div>
+
+      <div class="loaded" id="loaded">
+        <div class="lf-head">
+          <span class="lf-badge">LOADED</span>
+          <span class="lf-name" id="lfName"></span>
+          <button class="lf-remove" id="lfRemove">CLEAR</button>
+        </div>
+        <div class="lf-meta">
+          <div><div class="k">Size</div><div class="v" id="lfSize">--</div></div>
+          <div><div class="k">Duration</div><div class="v" id="lfDur">--</div></div>
+          <div><div class="k">Format</div><div class="v">MP4</div></div>
+        </div>
+        <audio id="player" controls preload="metadata"></audio>
+      </div>
+    </div>
+
+    <!-- STEP 02 : PARAMETERS -->
+    <div class="console reveal d3">
+      <div class="step-tag" data-n="02">Toggle Parameters</div>
+
+      <div class="row">
+        <div class="lbl">
+          <span class="idx">A</span>
+          <span><span class="name">Segment length</span><span class="desc">how much audio to transcribe</span></span>
+        </div>
+        <div class="seg" id="durSeg">
+          <button type="button" data-v="60">1 MIN</button>
+          <button type="button" data-v="180">3 MIN</button>
+          <button type="button" data-v="300" class="on">5 MIN</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="lbl">
+          <span class="idx">B</span>
+          <span><span class="name">Language</span><span class="desc">spoken language of the audio</span></span>
+        </div>
+        <select id="language">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="pt">Portuguese</option>
+        </select>
+      </div>
+
+      <div class="row locked">
+        <div class="lbl">
+          <span class="idx">C</span>
+          <span><span class="name">Timestamps <span class="pro">PRO</span></span><span class="desc">mark [mm:ss] on each line</span></span>
+        </div>
+        <button type="button" class="pro-lock" data-feat="Timestamps" title="Available to paid users">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="1.5" fill="currentColor"/>
+            <path d="M8 11 V8 a4 4 0 0 1 8 0 V11" fill="none" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          PRO
+        </button>
+        <input type="checkbox" id="timestamps" disabled hidden />
+      </div>
+
+      <div class="row locked">
+        <div class="lbl">
+          <span class="idx">D</span>
+          <span><span class="name">Speaker labels <span class="pro">PRO</span></span><span class="desc">tag distinct speakers</span></span>
+        </div>
+        <button type="button" class="pro-lock" data-feat="Speaker labels" title="Available to paid users">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="1.5" fill="currentColor"/>
+            <path d="M8 11 V8 a4 4 0 0 1 8 0 V11" fill="none" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          PRO
+        </button>
+        <input type="checkbox" id="speaker" disabled hidden />
+      </div>
+    </div>
+
+    <!-- STEP 03 : RUN -->
+    <div class="reveal d4">
+      <button class="generate" id="run" disabled><span id="runLabel">Load a file to begin</span></button>
+
+      <div class="prog" id="prog"><div class="prog-bar" id="progBar"></div></div>
+      <div class="status" id="status"></div>
+
+      <div class="result" id="result">
+        <div class="result-head">
+          <span class="res-badge">OUTPUT .TXT</span>
+          <button class="res-copy" id="resCopy">COPY</button>
+        </div>
+        <pre class="result-body" id="resBody"></pre>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="reveal d4">
+    <span>LimeStone Mountain LLC</span>
+    <span id="backendTag">localhost:5000</span>
+  </footer>
+</div>
+
+<script>
+  const BACKEND = "http://localhost:5000/transcribe";
+
+  const fileInput = document.getElementById("file");
+  const drop      = document.getElementById("drop");
+  const loaded    = document.getElementById("loaded");
+  const lfName    = document.getElementById("lfName");
+  const lfSize    = document.getElementById("lfSize");
+  const lfDur     = document.getElementById("lfDur");
+  const player    = document.getElementById("player");
+  const lfRemove  = document.getElementById("lfRemove");
+  const run       = document.getElementById("run");
+  const runLabel  = document.getElementById("runLabel");
+  const prog      = document.getElementById("prog");
+  const progBar   = document.getElementById("progBar");
+  const status    = document.getElementById("status");
+  const durSeg    = document.getElementById("durSeg");
+
+  let duration = 300; // default 5 min
+  let objectUrl = null;
+
+  // --- segmented duration control ---
+  durSeg.addEventListener("click", e => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    durSeg.querySelectorAll("button").forEach(b => b.classList.remove("on"));
+    btn.classList.add("on");
+    duration = parseInt(btn.dataset.v, 10);
+  });
+
+  // --- file handling ---
+  fileInput.addEventListener("change", () => acceptFile(fileInput.files[0]));
+
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", e => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    const f = e.dataTransfer.files[0];
+    if (f) { fileInput.files = e.dataTransfer.files; acceptFile(f); }
+  });
+
+  lfRemove.addEventListener("click", () => resetFile());
+
+  function acceptFile(file) {
+    if (!file) return;
+    if (!/\.mp4$/i.test(file.name) && file.type !== "video/mp4") {
+      flash("error", "<b>Rejected.</b> Only .mp4 files are accepted.");
+      resetFile();
+      return;
+    }
+    clearStatus();
+
+    lfName.textContent = file.name;
+    lfSize.textContent = fmtSize(file.size);
+    lfDur.textContent  = "...";
+
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(file);
+    player.src = objectUrl;
+
+    player.onloadedmetadata = () => {
+      lfDur.textContent = isFinite(player.duration) ? fmtTime(player.duration) : "--";
+    };
+
+    loaded.classList.add("show");
+    run.disabled = false;
+    runLabel.textContent = "Generate Notes";
+  }
+
+  function resetFile() {
+    fileInput.value = "";
+    loaded.classList.remove("show");
+    document.getElementById("result").classList.remove("show");
+    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+    player.removeAttribute("src");
+    run.disabled = true;
+    runLabel.textContent = "Load a file to begin";
+  }
+
+  // --- submit ---
+  run.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const form = new FormData();
+    form.append("file", file);
+    form.append("duration", duration);
+    form.append("language", document.getElementById("language").value);
+    form.append("timestamps", document.getElementById("timestamps").checked);
+    form.append("speaker", document.getElementById("speaker").checked);
+
+    run.disabled = true;
+    runLabel.textContent = "Processing...";
+    document.getElementById("result").classList.remove("show");
+    prog.style.display = "block";
+    animate();
+    flash("info", "<b>Working.</b> Uploading audio and transcribing the first " + (duration/60) + " min...");
+
+    try {
+      const res  = await fetch(BACKEND, { method: "POST", body: form });
+      const data = await res.json();
+      progBar.style.width = "100%";
+
+      if (res.ok && data.output) {
+        flash("success", "<b>Done.</b> Transcript written to:<br>" + data.output);
+        if (data.text) {
+          document.getElementById("resBody").textContent = data.text;
+          document.getElementById("result").classList.add("show");
+        }
+      } else {
+        flash("error", "<b>Error.</b> " + (data.error || "Server returned an error."));
+      }
+    } catch (err) {
+      flash("error", "<b>Offline.</b> Cannot reach backend at localhost:5000. Start the Python server first.");
+    } finally {
+      run.disabled = false;
+      runLabel.textContent = "Generate Notes";
+      setTimeout(() => { prog.style.display = "none"; progBar.style.width = "0"; }, 600);
+    }
+  });
+
+  // --- helpers ---
+  function flash(type, html) {
+    status.innerHTML = html;
+    status.className = "status show " + type;
+  }
+  function clearStatus() { status.className = "status"; }
+
+  function animate() {
+    let p = 0;
+    const iv = setInterval(() => {
+      p += 3;
+      if (p >= 88) return clearInterval(iv);
+      progBar.style.width = p + "%";
+    }, 280);
+  }
+
+  function fmtSize(b) {
+    if (b < 1024) return b + " B";
+    if (b < 1048576) return (b/1024).toFixed(1) + " KB";
+    return (b/1048576).toFixed(1) + " MB";
+  }
+  function fmtTime(s) {
+    const m = Math.floor(s/60), sec = Math.floor(s%60);
+    return m + ":" + String(sec).padStart(2, "0");
+  }
+
+  // copy the displayed .txt content
+  document.getElementById("resCopy").addEventListener("click", () => {
+    navigator.clipboard.writeText(document.getElementById("resBody").textContent);
+  });
+
+  // locked pro features -> upgrade hint
+  document.querySelectorAll(".pro-lock").forEach(btn => {
+    btn.addEventListener("click", () => {
+      flash("info", "<b>" + btn.dataset.feat + "</b> is a Pro feature -- upgrade to unlock.");
+    });
+  });
+</script>
+</body>
+</html>

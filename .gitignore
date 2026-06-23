@@ -1,0 +1,8 @@
+# local media + generated output -- never publish
+uploads/
+output/
+
+# python / runtime junk
+__pycache__/
+*.pyc
+*.log
