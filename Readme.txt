@@ -1,7 +1,15 @@
-Project title: Simple Notes generator with built-in toggle perimeters (.mp4 in, .txt out).
+Project Title: Simple Notes Generator with Built-in Toggle Parameters (.mp4 in, .txt out).
 
-Inputs: User interface (.html) that allow user upload 1 (.mp4) file.
-Production: (.py) files that runs automatically to transcript and analyze this (.mp4) file uploaded by user. 
-Output: 1 .txt file that transcribe the first 3/5/10/30/60 mins of the .mp4 file.
+Overview: Users access the HTML user interface via a public sharing link, which allows them to upload a single .mp4 file from their local device.
 
-Help me generate this .html file and open it up that used as user interface.This simple user interface (.html) file should let user upload any (.mp4) files and it will scan and translate those into raw text (Only support English currently) with optional paid toggle that unlocks new feature such as speaker label, Timesteamp, summary & other supported functionalities. 
+How It Works:
+* Python (.py) files run in the background to process and transcribe the audio from the uploaded .mp4 file.
+* Output: The application generates and automatically downloads a .txt file to the user's device. This text file contains the transcription of the first 3, 5, 10, 30, or 60 minutes of the uploaded video.
+
+About This Repository: This repo contains everything needed to run the .html file and open the user interface. This simple UI lets users upload .mp4 files, which are then scanned and transcribed into raw text (currently supporting English only). It also includes an optional paid toggle that unlocks advanced features, 
+
+such as: 
+1. Speaker labels
+2. Timestamps
+3. Summaries
+4. Other supported functionalities
