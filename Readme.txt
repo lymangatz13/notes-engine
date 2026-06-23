@@ -8,6 +8,8 @@ How It Works:
 
 About This Repository: This repo contains everything needed to run the .html file and open the user interface. This simple UI lets users upload .mp4 files, which are then scanned and transcribed into raw text (currently supporting English only). It also includes an optional paid toggle that unlocks advanced features, 
 
+Use Vercel to host the public site.
+
 such as: 
 1. Speaker labels
 2. Timestamps
